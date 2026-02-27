@@ -15,7 +15,7 @@
 / {
 
 	model = "ArmSom RK3528 sige1 Board";
-	compatible = "armsom,sige1-v1.0", "rockchip,rk3528";
+	compatible = "rockchip,rk3588-armsom-sige1", "rockchip,rk3528";
 
 	chosen: chosen {
 		bootargs = "earlycon=uart8250,mmio32,0xff9f0000 console=ttyFIQ0 root=PARTUUID=614e0000-0000 rw rootwait";
@@ -264,7 +264,6 @@
 
 	vdd_gpu: vdd-gpu {
 		compatible = "pwm-regulator";
-		pwms = <&pwm0 0 5000 1>;
 		regulator-name = "vdd_gpu";
 		regulator-min-microvolt = <705000>;
 		regulator-max-microvolt = <1148000>;
@@ -440,10 +439,6 @@
 };
 
 &mpp_srv {
-	status = "okay";
-};
-
-&pwm0 {
 	status = "okay";
 };
 
