@@ -14,23 +14,30 @@
 #include "rkx120_reg.h"
 #include "serdes_combphy.h"
 
-#if defined(CONFIG_DEBUG_FS)
 static struct pattern_gen rkx120_pattern_gen[] = {
 	{
 		.name = "dsi",
 		.base = RKX120_PATTERN_GEN_DSI_BASE,
 		.link_src_reg = DES_GRF_SOC_CON2,
 		.link_src_offset = 12,
+		.type = RK_SERDES_DSI_TX0,
+	}, {
+		.name = "dual-lvds",
+		.link_src_reg = DES_GRF_SOC_CON1,
+		.link_src_offset = 14,
+		.type = RK_SERDES_DUAL_LVDS_TX,
 	}, {
 		.name = "lvds0",
 		.base = RKX120_PATTERN_GEN_LVDS0_BASE,
 		.link_src_reg = DES_GRF_SOC_CON2,
 		.link_src_offset = 13,
+		.type = RK_SERDES_LVDS_TX0,
 	}, {
 		.name = "lvds1",
 		.base = RKX120_PATTERN_GEN_LVDS1_BASE,
 		.link_src_reg = DES_GRF_SOC_CON2,
 		.link_src_offset = 14,
+		.type = RK_SERDES_LVDS_TX1,
 	},
 	{ /* sentinel */ }
 };
@@ -111,6 +118,11 @@ static const struct rk_serdes_reg rkx120_regs[] = {
 		.name = "pcs1",
 		.reg_base = RKX120_DES_PCS1_BASE,
 		.reg_len = 0x1c0,
+	},
+	{
+		.name = "pwm",
+		.reg_base = RKX120_PWM_BASE,
+		.reg_len = 0x100,
 	},
 	{
 		.name = "pma0",
@@ -231,8 +243,16 @@ static const struct file_operations rkx120_reg_fops = {
 void rkx120_debugfs_init(struct rk_serdes_chip *chip, struct dentry *dentry)
 {
 	const struct rk_serdes_reg *regs = rkx120_regs;
-	struct pattern_gen *pattern_gen = rkx120_pattern_gen;
+	struct pattern_gen *pattern_gen;
 	struct dentry *dir;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_FS))
+		return;
+
+	pattern_gen = devm_kmemdup(chip->serdes->dev, &rkx120_pattern_gen,
+				   sizeof(rkx120_pattern_gen), GFP_KERNEL);
+	if (!pattern_gen)
+		return;
 
 	dir = debugfs_create_dir("registers", dentry);
 	if (!IS_ERR(dir)) {
@@ -250,7 +270,6 @@ void rkx120_debugfs_init(struct rk_serdes_chip *chip, struct dentry *dentry)
 		}
 	}
 }
-#endif
 
 static int rkx120_rgb_tx_iomux_cfg(struct rk_serdes *serdes, struct rk_serdes_route *route,
 				   u8 remote_id)
@@ -289,6 +308,8 @@ int rkx120_lvds_tx_enable(struct rk_serdes *serdes, struct rk_serdes_route *rout
 			  u8 phy_id)
 {
 	struct i2c_client *client = serdes->chip[remote_id].client;
+	struct rk_serdes_panel *sd_panel = container_of(route, struct rk_serdes_panel, route);
+	struct rkx120_combtxphy *combtxphy = &sd_panel->combtxphy;
 
 	if (phy_id) {
 		serdes->i2c_write_reg(client, DES_GRF_SOC_CON7, 0xfff00630);
@@ -298,12 +319,23 @@ int rkx120_lvds_tx_enable(struct rk_serdes *serdes, struct rk_serdes_route *rout
 		serdes->i2c_write_reg(client, DES_GRF_SOC_CON2, 0x00040004);
 	}
 
-	rkx120_combtxphy_set_mode(serdes, COMBTX_PHY_MODE_VIDEO_LVDS);
+	rkx120_combtxphy_set_mode(combtxphy, COMBTX_PHY_MODE_VIDEO_LVDS);
 	if (route->remote0_port0 & RK_SERDES_DUAL_LVDS_TX)
-		rkx120_combtxphy_set_rate(serdes, route->vm.pixelclock * 7 / 2);
+		rkx120_combtxphy_set_rate(combtxphy, route->vm.pixelclock * 7 / 2);
 	else
-		rkx120_combtxphy_set_rate(serdes, route->vm.pixelclock * 7);
-	rkx120_combtxphy_power_on(serdes, remote_id, phy_id);
+		rkx120_combtxphy_set_rate(combtxphy, route->vm.pixelclock * 7);
+	rkx120_combtxphy_power_on(serdes, combtxphy, remote_id, phy_id);
+
+	return 0;
+}
+
+int rkx120_lvds_tx_disable(struct rk_serdes *serdes, struct rk_serdes_route *route, u8 remote_id,
+			   u8 phy_id)
+{
+	struct rk_serdes_panel *sd_panel = container_of(route, struct rk_serdes_panel, route);
+	struct rkx120_combtxphy *combtxphy = &sd_panel->combtxphy;
+
+	rkx120_combtxphy_power_off(serdes, combtxphy, remote_id, phy_id);
 
 	return 0;
 }

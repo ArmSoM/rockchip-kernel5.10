@@ -411,6 +411,7 @@
 			reg = <1>;
 
 			dp0_out_i2c4_bu18tl82: endpoint {
+				link-frequencies = /bits/ 64 <1620000000>;
 				remote-endpoint = <&i2c4_bu18tl82_in_dp0>;
 			};
 		};
@@ -682,6 +683,7 @@
 			02a8 0003
 			02a9 0004
 			02aa 0005
+			02af 0002	//gpio0 1MHZ
 			0045 0080
 			0046 0007	//1920
 			004b 00d0
@@ -754,28 +756,29 @@
 		i2c2_bu18tl82_bridge: i2c2-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c2_bu18tl82_in_dsi0: endpoint {
-					remote-endpoint = <&dsi0_out_i2c2_bu18tl82>;
+					i2c2_bu18tl82_in_dsi0: endpoint {
+						remote-endpoint = <&dsi0_out_i2c2_bu18tl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c2_bu18tl82_out_i2c2_bu18rl82: endpoint {
+						remote-endpoint = <&i2c2_bu18rl82_in_i2c2_bu18tl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c2_bu18tl82_out_i2c2_bu18rl82: endpoint {
-					remote-endpoint = <&i2c2_bu18rl82_in_i2c2_bu18tl82>;
-				};
-			};
 		};
+
 	};
 
 	i2c2_bu18rl82: i2c2-bu18rl82@30 {
@@ -796,20 +799,18 @@
 			0424 0000
 			0425 0020
 			0426 0080
-			//0057 0000
-			//0058 0002
-			//0057 0000	//rl gpio0 output	lcd_bl_pwm
-			//0058 0002	//bypass ser gpio0
-			//005a 0000	//rl gpio1 output	lcd_pwr_en
-			//005b 0003	//bypass ser gpio1
-			//005d 0000	//rl gpio2 output	lcd_rst
-			//005e 0004	//bypass ser gpio2
-			//0060 0000	//rl gpio3 output	tp-rst
-			//0061 0005	//bypass ser gpio3
-			//0063 0018	//rl gpio4 input	tp-int
-			//0064 0006	//bypass ser gpio4
-			//0066 0000	//rl gpio5 output
-			//0067 0001	//set gpio5 high
+			0057 0000	//rl gpio0 output	lcd_bl_pwm
+			0058 0000	//bypass ser gpio0
+			005a 0000	//rl gpio1 output	lcd_pwr_en
+			005b 0000	//bypass ser gpio1
+			005d 0000	//rl gpio2 output	lcd_rst
+			005e 0000	//bypass ser gpio2
+			0060 0000	//rl gpio3 output	tp-rst
+			0061 0000	//bypass ser gpio3
+			0063 0018	//rl gpio4 input	tp-int
+			0064 0006	//bypass ser gpio4
+			0066 0000	//rl gpio5 output
+			0067 0000	//set gpio5 high
 
 			0073 0080
 			0074 0007	//0x0780 = 1920
@@ -853,24 +854,15 @@
 
 		i2c2_bu18rl82_pinctrl: i2c2-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
-			pinctrl-names = "default","sleep";
+			pinctrl-names = "default","init","sleep";
 			pinctrl-0 = <&i2c2_bu18rl82_panel_pins>;
-			pinctrl-1 = <&i2c2_bu18rl82_panel_sleep_pins>;
+			pinctrl-1 = <&i2c2_bu18rl82_panel_pins>;
+			pinctrl-2 = <&i2c2_bu18rl82_panel_sleep_pins>;
 			status = "okay";
 
 			i2c2_bu18rl82_panel_pins: panel-pins {
-				lcd-bl-pwm {
-					pins = "BU18RL82_GPIO0";
-					function = "SER_GPIO0_TO_DES";
-				};
-
-				lcd-pwr-en {
-					pins = "BU18RL82_GPIO1";
-					function = "SER_GPIO1_TO_DES";
-				};
-
-				lcd-rst {
-					pins = "BU18RL82_GPIO2";
+				lcd-otp-pin {
+					pins = "BU18RL82_GPIO5";
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
@@ -879,14 +871,29 @@
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
+				lcd-rst {
+					pins = "BU18RL82_GPIO2";
+					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
 				tp-int {
 					pins = "BU18RL82_GPIO4";
 					function = "DES_TO_SER_GPIO3";
 				};
 
-				lcd-otp-pin {
-					pins = "BU18RL82_GPIO5";
+				40ms-delay {
+					pins = "BU18RL82_GPIO1";
+					function = "DELAY_40MS";
+				};
+
+				lcd-pwr-en {
+					pins = "BU18RL82_GPIO1";
 					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
+				lcd-bl-pwm {
+					pins = "BU18RL82_GPIO0";
+					function = "SER_GPIO0_TO_DES";
 				};
 			};
 
@@ -920,25 +927,25 @@
 		i2c2_bu18rl82_bridge: i2c2-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c2_bu18rl82_in_i2c2_bu18tl82: endpoint {
-					remote-endpoint = <&i2c2_bu18tl82_out_i2c2_bu18rl82>;
+					i2c2_bu18rl82_in_i2c2_bu18tl82: endpoint {
+						remote-endpoint = <&i2c2_bu18tl82_out_i2c2_bu18rl82>;
+					};
 				};
-			};
 
-			port@1 {
-				reg = <1>;
+				port@1 {
+					reg = <1>;
 
-				i2c2_bu18rl82_out_panel0: endpoint {
-					remote-endpoint = <&panel0_in_i2c2_bu18rl82>;
+					i2c2_bu18rl82_out_panel0: endpoint {
+						remote-endpoint = <&panel0_in_i2c2_bu18rl82>;
+					};
 				};
 			};
 		};
@@ -1016,6 +1023,7 @@
 			02a8 0003
 			02a9 0004
 			02aa 0005
+			02af 0002	//gpio0 1MHZ
 			0045 0080
 			0046 0007	//1920
 			004b 00d0
@@ -1088,28 +1096,29 @@
 		i2c4_bu18tl82_bridge: i2c4-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c4_bu18tl82_in_dp0: endpoint {
-					remote-endpoint = <&dp0_out_i2c4_bu18tl82>;
+					i2c4_bu18tl82_in_dp0: endpoint {
+						remote-endpoint = <&dp0_out_i2c4_bu18tl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c4_bu18tl82_out_i2c4_bu18rl82: endpoint {
+						remote-endpoint = <&i2c4_bu18rl82_in_i2c4_bu18tl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c4_bu18tl82_out_i2c4_bu18rl82: endpoint {
-					remote-endpoint = <&i2c4_bu18rl82_in_i2c4_bu18tl82>;
-				};
-			};
 		};
+
 	};
 
 	i2c4_bu18rl82: i2c4-bu18rl82@30 {
@@ -1130,20 +1139,18 @@
 			0424 0000
 			0425 0020
 			0426 0080
-			//0057 0000
-			//0058 0002
-			//0057 0000	//rl gpio0 output	lcd_bl_pwm
-			//0058 0002	//bypass ser gpio0
-			//005a 0000	//rl gpio1 output	lcd_pwr_en
-			//005b 0003	//bypass ser gpio1
-			//005d 0000	//rl gpio2 output	lcd_rst
-			//005e 0004	//bypass ser gpio2
-			//0060 0000	//rl gpio3 output	tp-rst
-			//0061 0005	//bypass ser gpio3
-			//0063 0018	//rl gpio4 input	tp-int
-			//0064 0006	//bypass ser gpio4
-			//0066 0000	//rl gpio5 output
-			//0067 0001	//set gpio5 high
+			0057 0000	//rl gpio0 output	lcd_bl_pwm
+			0058 0000	//set gpio0 low
+			005a 0000	//rl gpio1 output	lcd_pwr_en
+			005b 0000	//set gpio1 low
+			005d 0000	//rl gpio2 output	lcd_rst
+			005e 0000	//set gpio2 low
+			0060 0000	//rl gpio3 output	tp-rst
+			0061 0000	//set gpio3 low
+			0063 0018	//rl gpio4 input	tp-int
+			0064 0006	//bypass ser gpio4
+			0066 0000	//rl gpio5 output
+			0067 0000	//set gpio5 low
 
 			0073 0080
 			0074 0007	//0x0780 = 1920
@@ -1187,24 +1194,15 @@
 
 		i2c4_bu18rl82_pinctrl: i2c4-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
-			pinctrl-names = "default","sleep";
+			pinctrl-names = "default","init","sleep";
 			pinctrl-0 = <&i2c4_bu18rl82_panel_pins>;
-			pinctrl-1 = <&i2c4_bu18rl82_panel_sleep_pins>;
+			pinctrl-1 = <&i2c4_bu18rl82_panel_pins>;
+			pinctrl-2 = <&i2c4_bu18rl82_panel_sleep_pins>;
 			status = "okay";
 
 			i2c4_bu18rl82_panel_pins: panel-pins {
-				lcd-bl-pwm {
-					pins = "BU18RL82_GPIO0";
-					function = "SER_GPIO0_TO_DES";
-				};
-
-				lcd-pwr-en {
-					pins = "BU18RL82_GPIO1";
-					function = "SER_GPIO1_TO_DES";
-				};
-
-				lcd-rst {
-					pins = "BU18RL82_GPIO2";
+				lcd-otp-pin {
+					pins = "BU18RL82_GPIO5";
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
@@ -1213,14 +1211,29 @@
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
+				lcd-rst {
+					pins = "BU18RL82_GPIO2";
+					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
 				tp-int {
 					pins = "BU18RL82_GPIO4";
 					function = "DES_TO_SER_GPIO3";
 				};
 
-				lcd-otp-pin {
-					pins = "BU18RL82_GPIO5";
+				40ms-delay {
+					pins = "BU18RL82_GPIO1";
+					function = "DELAY_40MS";
+				};
+
+				lcd-pwr-en {
+					pins = "BU18RL82_GPIO1";
 					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
+				lcd-bl-pwm {
+					pins = "BU18RL82_GPIO0";
+					function = "SER_GPIO0_TO_DES";
 				};
 			};
 
@@ -1254,28 +1267,29 @@
 		i2c4_bu18rl82_bridge: i2c4-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c4_bu18rl82_in_i2c4_bu18tl82: endpoint {
-					remote-endpoint = <&i2c4_bu18tl82_out_i2c4_bu18rl82>;
+					i2c4_bu18rl82_in_i2c4_bu18tl82: endpoint {
+						remote-endpoint = <&i2c4_bu18tl82_out_i2c4_bu18rl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c4_bu18rl82_out_panel0: endpoint {
+						remote-endpoint = <&panel0_in_i2c4_bu18rl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c4_bu18rl82_out_panel0: endpoint {
-					remote-endpoint = <&panel0_in_i2c4_bu18rl82>;
-				};
-			};
 		};
+
 	};
 
 	himax@48 {
@@ -1337,6 +1351,7 @@
 			0275 0020
 			0296 0004
 			0297 000d
+			02af 0002	//gpio0 1MHZ
 			02b2 00c8
 			02b4 0001
 			02b8 00ff
@@ -1418,28 +1433,29 @@
 		i2c5_bu18tl82_bridge: i2c5-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c5_bu18tl82_in_edp0: endpoint {
-					remote-endpoint = <&edp0_out_i2c5_bu18tl82>;
+					i2c5_bu18tl82_in_edp0: endpoint {
+						remote-endpoint = <&edp0_out_i2c5_bu18tl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c5_bu18tl82_out_i2c5_bu18rl82: endpoint {
+						remote-endpoint = <&i2c5_bu18rl82_in_i2c5_bu18tl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c5_bu18tl82_out_i2c5_bu18rl82: endpoint {
-					remote-endpoint = <&i2c5_bu18rl82_in_i2c5_bu18tl82>;
-				};
-			};
 		};
+
 	};
 
 	i2c5_bu18rl82: i2c5-bu18rl82@30 {
@@ -1456,20 +1472,18 @@
 			0020 0002
 			0031 0041	//i2c addr 0x41
 			0032 0041	//i2c addr 0x41
-			//0057 0000	//rl gpio0 output	lcd_bl_pwm
-			//0058 0002	//bypass ser gpio0
-			//005a 0000	//rl gpio1 output	lcd_pwr_en
-			//005b 0001	//bypass ser gpio1
-			//005d 0000	//rl gpio2 output	lcd_rst
-			//005e 0004	//bypass ser gpio2
-			//0060 0018	//rl gpio3 input	tp-int
-			//042e 0005	//bypass ser gpio3
-			//0061 0005	//bypass ser gpio3
-			//0063 0000	//rl gpio4 output	tp-rst
-			//042f 0006	//bypass ser gpio4
-			//0064 0006	//bypass ser gpio4
-			//0066 0000	//rl gpio5 output
-			//0067 0007	//bypass ser gpio5
+			0057 0000	//rl gpio0 output	lcd_bl_pwm
+			0058 0000	//set gpio0 low
+			005a 0000	//rl gpio1 output	lcd_pwr_en
+			005b 0000	//set gpio1 low
+			005d 0000	//rl gpio2 output	lcd_rst
+			005e 0000	//set gpio2 low
+			0060 0000	//rl gpio3 output	tp-rst
+			0061 0000	//set gpio3 low
+			0063 0018	//rl gpio4 input	tp-int
+			0064 0006	//bypass ser gpio4
+			0066 0000	//rl gpio5 output
+			0067 0000	//set gpio5 low
 			0073 0080
 			0074 0007
 			0079 000a
@@ -1514,20 +1528,21 @@
 
 		i2c5_bu18rl82_pinctrl: i2c5-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
-			pinctrl-names = "default","sleep";
+			pinctrl-names = "default","init","sleep";
 			pinctrl-0 = <&i2c5_bu18rl82_panel_pins>;
-			pinctrl-1 = <&i2c5_bu18rl82_panel_sleep_pins>;
+			pinctrl-1 = <&i2c5_bu18rl82_panel_pins>;
+			pinctrl-2 = <&i2c5_bu18rl82_panel_sleep_pins>;
 			status = "okay";
 
 			i2c5_bu18rl82_panel_pins: panel-pins {
-				lcd-bl-pwm {
-					pins = "BU18RL82_GPIO0";
-					function = "SER_GPIO0_TO_DES";
+				lcd-otp-pin {
+					pins = "BU18RL82_GPIO5";
+					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
-				lcd-pwr-en {
-					pins = "BU18RL82_GPIO1";
-					function = "SER_GPIO1_TO_DES";
+				tp-rst {
+					pins = "BU18RL82_GPIO3";
+					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
 				lcd-rst {
@@ -1536,18 +1551,23 @@
 				};
 
 				tp-int {
-					pins = "BU18RL82_GPIO3";
+					pins = "BU18RL82_GPIO4";
 					function = "DES_TO_SER_GPIO3";
 				};
 
-				tp-rst {
-					pins = "BU18RL82_GPIO4";
+				40ms-delay {
+					pins = "BU18RL82_GPIO1";
+					function = "DELAY_40MS";
+				};
+
+				lcd-pwr-en {
+					pins = "BU18RL82_GPIO1";
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
-				lcd-otp-pin {
-					pins = "BU18RL82_GPIO5";
-					function = "DES_GPIO_OUTPUT_HIGH";
+				lcd-bl-pwm {
+					pins = "BU18RL82_GPIO0";
+					function = "SER_GPIO0_TO_DES";
 				};
 			};
 
@@ -1581,28 +1601,29 @@
 		i2c5_bu18rl82_bridge: i2c5-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c5_bu18rl82_in_i2c5_bu18tl82: endpoint {
-					remote-endpoint = <&i2c5_bu18tl82_out_i2c5_bu18rl82>;
+					i2c5_bu18rl82_in_i2c5_bu18tl82: endpoint {
+						remote-endpoint = <&i2c5_bu18tl82_out_i2c5_bu18rl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c5_bu18rl82_out_panel0: endpoint {
+						remote-endpoint = <&panel0_in_i2c5_bu18rl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c5_bu18rl82_out_panel0: endpoint {
-					remote-endpoint = <&panel0_in_i2c5_bu18rl82>;
-				};
-			};
 		};
+
 	};
 
 	ilitek@41 {
@@ -1682,6 +1703,7 @@
 			02a8 0003
 			02a9 0004
 			02aa 0005
+			02af 0002	//gpio0 1MHZ
 			0045 0080
 			0046 0007	//1920
 			004b 00d0
@@ -1757,25 +1779,25 @@
 		i2c6_bu18tl82_bridge: i2c6-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c6_bu18tl82_in_dsi1: endpoint {
-					remote-endpoint = <&dsi1_out_i2c6_bu18tl82>;
+					i2c6_bu18tl82_in_dsi1: endpoint {
+						remote-endpoint = <&dsi1_out_i2c6_bu18tl82>;
+					};
 				};
-			};
 
-			port@1 {
-				reg = <1>;
+				port@1 {
+					reg = <1>;
 
-				i2c6_bu18tl82_out_i2c6_bu18rl82: endpoint {
-					remote-endpoint = <&i2c6_bu18rl82_in_i2c6_bu18tl82>;
+					i2c6_bu18tl82_out_i2c6_bu18rl82: endpoint {
+						remote-endpoint = <&i2c6_bu18rl82_in_i2c6_bu18tl82>;
+					};
 				};
 			};
 		};
@@ -1799,20 +1821,18 @@
 			0424 0000
 			0425 0020
 			0426 0080
-			//0057 0000
-			//0058 0002
-			//0057 0000	//rl gpio0 output	lcd_bl_pwm
-			//0058 0002	//bypass ser gpio0
-			//005a 0000	//rl gpio1 output	lcd_pwr_en
-			//005b 0003	//bypass ser gpio1
-			//005d 0000	//rl gpio2 output	lcd_rst
-			//005e 0004	//bypass ser gpio2
-			//0060 0000	//rl gpio3 output	tp-rst
-			//0061 0005	//bypass ser gpio3
-			//0063 0018	//rl gpio4 input	tp-int
-			//0064 0006	//bypass ser gpio4
-			//0066 0000	//rl gpio5 output
-			//0067 0001	//set gpio5 high
+			0057 0000	//rl gpio0 output	lcd_bl_pwm
+			0058 0000	//set gpio0 low
+			005a 0000	//rl gpio1 output	lcd_pwr_en
+			005b 0000	//set gpio1 low
+			005d 0000	//rl gpio2 output	lcd_rst
+			005e 0000	//set gpio2 low
+			0060 0000	//rl gpio3 output	tp-rst
+			0061 0000	//set gpio3 low
+			0063 0018	//rl gpio4 input	tp-int
+			0064 0006	//bypass ser gpio4
+			0066 0000	//rl gpio5 output
+			0067 0000	//set gpio5 low
 
 			0073 0080
 			0074 0007	//0x0780 = 1920
@@ -1856,24 +1876,15 @@
 
 		i2c6_bu18rl82_pinctrl: i2c6-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
-			pinctrl-names = "default","sleep";
+			pinctrl-names = "default","init","sleep";
 			pinctrl-0 = <&i2c6_bu18rl82_panel_pins>;
-			pinctrl-1 = <&i2c6_bu18rl82_panel_sleep_pins>;
+			pinctrl-1 = <&i2c6_bu18rl82_panel_pins>;
+			pinctrl-2 = <&i2c6_bu18rl82_panel_sleep_pins>;
 			status = "okay";
 
 			i2c6_bu18rl82_panel_pins: panel-pins {
-				lcd-bl-pwm {
-					pins = "BU18RL82_GPIO0";
-					function = "SER_GPIO0_TO_DES";
-				};
-
-				lcd-pwr-en {
-					pins = "BU18RL82_GPIO1";
-					function = "SER_GPIO1_TO_DES";
-				};
-
-				lcd-rst {
-					pins = "BU18RL82_GPIO2";
+				lcd-otp-pin {
+					pins = "BU18RL82_GPIO5";
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
@@ -1882,14 +1893,29 @@
 					function = "DES_GPIO_OUTPUT_HIGH";
 				};
 
+				lcd-rst {
+					pins = "BU18RL82_GPIO2";
+					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
 				tp-int {
 					pins = "BU18RL82_GPIO4";
 					function = "DES_TO_SER_GPIO3";
 				};
 
-				lcd-otp-pin {
-					pins = "BU18RL82_GPIO5";
+				40ms-delay {
+					pins = "BU18RL82_GPIO1";
+					function = "DELAY_40MS";
+				};
+
+				lcd-pwr-en {
+					pins = "BU18RL82_GPIO1";
 					function = "DES_GPIO_OUTPUT_HIGH";
+				};
+
+				lcd-bl-pwm {
+					pins = "BU18RL82_GPIO0";
+					function = "SER_GPIO0_TO_DES";
 				};
 			};
 
@@ -1923,28 +1949,29 @@
 		i2c6_bu18rl82_bridge: i2c6-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
 			status = "okay";
-		};
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c6_bu18rl82_in_i2c6_bu18tl82: endpoint {
-					remote-endpoint = <&i2c6_bu18tl82_out_i2c6_bu18rl82>;
+					i2c6_bu18rl82_in_i2c6_bu18tl82: endpoint {
+						remote-endpoint = <&i2c6_bu18tl82_out_i2c6_bu18rl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c6_bu18rl82_out_panel1: endpoint {
+						remote-endpoint = <&panel1_in_i2c6_bu18rl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c6_bu18rl82_out_panel1: endpoint {
-					remote-endpoint = <&panel1_in_i2c6_bu18rl82>;
-				};
-			};
 		};
+
 	};
 
 	himax@48 {
@@ -1966,12 +1993,11 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c7m3_xfer>;
 	clock-frequency = <400000>;
-	status = "disabled";
 
 	i2c7_bu18tl82: i2c7-bu18tl82@10 {
 		compatible = "rohm,bu18tl82";
 		reg = <0x10>;
-		status = "okay";
+		status = "disabled";
 
 		serdes-init-sequence = [
 			0013 001a
@@ -2001,6 +2027,7 @@
 			0275 0020
 			0296 0004
 			0297 000d
+			02af 0002	//gpio0 1MHZ
 			02b2 00c8
 			02b4 0001
 			02b8 00ff
@@ -2043,7 +2070,7 @@
 			compatible = "rohm,bu18tl82-pinctrl";
 			pinctrl-names = "default";
 			pinctrl-0 = <&i2c7_bu18tl82_panel_pins>;
-			status = "okay";
+			status = "disabled";
 
 			i2c7_bu18tl82_panel_pins: panel-pins {
 				lcd-bl-pwm {
@@ -2070,7 +2097,7 @@
 
 			i2c7_bu18tl82_gpio: i2c7-bu18tl82-gpio {
 				compatible = "rohm,bu18tl82-gpio";
-				status = "okay";
+				status = "disabled";
 
 				gpio-controller;
 				#gpio-cells = <2>;
@@ -2080,25 +2107,26 @@
 
 		i2c7_bu18tl82_bridge: i2c7-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
-			status = "okay";
-		};
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			status = "disabled";
 
-			port@0 {
-				reg = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-				i2c7_bu18tl82_in_edp1: endpoint {
-					remote-endpoint = <&edp1_out_i2c7_bu18tl82>;
+				port@0 {
+					reg = <0>;
+
+					i2c7_bu18tl82_in_edp1: endpoint {
+						remote-endpoint = <&edp1_out_i2c7_bu18tl82>;
+					};
 				};
-			};
 
-			port@1 {
-				reg = <1>;
+				port@1 {
+					reg = <1>;
 
-				i2c7_bu18tl82_out_i2c7_bu18rl82: endpoint {
-					remote-endpoint = <&i2c7_bu18rl82_in_i2c7_bu18tl82>;
+					i2c7_bu18tl82_out_i2c7_bu18rl82: endpoint {
+						remote-endpoint = <&i2c7_bu18rl82_in_i2c7_bu18tl82>;
+					};
 				};
 			};
 		};
@@ -2107,7 +2135,8 @@
 	i2c7_bu18rl82: i2c7-bu18rl82@30 {
 		compatible = "rohm,bu18rl82";
 		reg = <0x30>;
-		status = "okay";
+		status = "disabled";
+
 		serdes-init-sequence = [
 			0011 000b
 			0012 0003
@@ -2171,11 +2200,12 @@
 			0645 0020
 			0646 001f
 		];
+
 		i2c7_bu18rl82_pinctrl: i2c7-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
 			pinctrl-names = "default";
 			pinctrl-0 = <&i2c7_bu18rl82_panel_pins>;
-			status = "okay";
+			status = "disabled";
 
 			i2c7_bu18rl82_panel_pins: panel-pins {
 				lcd-bl-pwm {
@@ -2211,7 +2241,7 @@
 
 			i2c7_bu18rl82_gpio: i2c7-bu18rl82-gpio {
 				compatible = "rohm,bu18rl82-gpio";
-				status = "okay";
+				status = "disabled";
 
 				gpio-controller;
 				#gpio-cells = <2>;
@@ -2221,36 +2251,37 @@
 
 		i2c7_bu18rl82_bridge: i2c7-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
-			status = "okay";
-		};
+			status = "disabled";
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c7_bu18rl82_in_i2c7_bu18tl82: endpoint {
-					remote-endpoint = <&i2c7_bu18tl82_out_i2c7_bu18rl82>;
+					i2c7_bu18rl82_in_i2c7_bu18tl82: endpoint {
+						remote-endpoint = <&i2c7_bu18tl82_out_i2c7_bu18rl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c7_bu18rl82_out_panel1: endpoint {
+						remote-endpoint = <&panel1_in_i2c7_bu18rl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c7_bu18rl82_out_panel1: endpoint {
-					remote-endpoint = <&panel1_in_i2c7_bu18rl82>;
-				};
-			};
 		};
+
 	};
 
 	lt7911d@2b {
 		compatible = "lontium,lt7911d-fb-notifier";
 		reg = <0x2b>;
 		reset-gpios = <&gpio4 RK_PA7 GPIO_ACTIVE_LOW>;
-		status = "okay";
+		status = "disabled";
 	};
 };
 
@@ -2258,12 +2289,11 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c8m2_xfer>;
 	clock-frequency = <400000>;
-	status = "disabled";
 
 	i2c8_bu18tl82: i2c8-bu18tl82@10 {
 		compatible = "rohm,bu18tl82";
 		reg = <0x10>;
-		status = "okay";
+		status = "disabled";
 
 		serdes-init-sequence = [
 			0013 001a	//013h[3]1-lane1 enable 013h[3] 1-LVDS Receiver Port-A
@@ -2310,6 +2340,7 @@
 			02a8 0003
 			02a9 0004
 			02aa 0005
+			02af 0002	//gpio0 1MHZ
 			0045 0080
 			0046 0007	//1920
 			004b 00d0
@@ -2338,11 +2369,12 @@
 			0444 0090	//h_blank=144
 			0446 00d2	//v_blank=210
 		];
+
 		i2c8_bu18tl82_pinctrl: i2c8-bu18tl82-pinctrl {
 			compatible = "rohm,bu18tl82-pinctrl";
 			pinctrl-names = "default";
 			pinctrl-0 = <&i2c8_bu18tl82_panel_pins>;
-			status = "okay";
+			status = "disabled";
 
 			i2c8_bu18tl82_panel_pins: panel-pins {
 				lcd-bl-pwm {
@@ -2369,7 +2401,7 @@
 
 			i2c8_bu18tl82_gpio: i2c8-bu18tl82-gpio {
 				compatible = "rohm,bu18tl82-gpio";
-				status = "okay";
+				status = "disabled";
 
 				gpio-controller;
 				#gpio-cells = <2>;
@@ -2379,35 +2411,37 @@
 
 		i2c8_bu18tl82_bridge: i2c8-bu18tl82-bridge {
 			compatible = "rohm,bu18tl82-bridge";
-			status = "okay";
-		};
+			status = "disabled";
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c8_bu18tl82_in_dp1: endpoint {
-					remote-endpoint = <&dp1_out_i2c8_bu18tl82>;
+					i2c8_bu18tl82_in_dp1: endpoint {
+						remote-endpoint = <&dp1_out_i2c8_bu18tl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c8_bu18tl82_out_i2c8_bu18rl82: endpoint {
+						remote-endpoint = <&i2c8_bu18rl82_in_i2c8_bu18tl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c8_bu18tl82_out_i2c8_bu18rl82: endpoint {
-					remote-endpoint = <&i2c8_bu18rl82_in_i2c8_bu18tl82>;
-				};
-			};
 		};
+
 	};
 
 	i2c8_bu18rl82: i2c8-bu18rl82@30 {
 		compatible = "rohm,bu18rl82";
 		reg = <0x30>;
-		status = "okay";
+		status = "disabled";
+
 		serdes-init-sequence = [
 			0011 0003	//Clockless Link Receiver Lane-0+ LVDS portA
 			0012 0003	//Clockless Link Receiver Lane-1+ LVDS portB
@@ -2475,11 +2509,12 @@
 			0644 0090
 			0646 00d2
 		];
+
 		i2c8_bu18rl82_pinctrl: i2c8-bu18rl82-pinctrl {
 			compatible = "rohm,bu18rl82-pinctrl";
 			pinctrl-names = "default";
 			pinctrl-0 = <&i2c8_bu18rl82_panel_pins>;
-			status = "okay";
+			status = "disabled";
 
 			i2c8_bu18rl82_panel_pins: panel-pins {
 				lcd-bl-pwm {
@@ -2515,7 +2550,7 @@
 
 			i2c8_bu18rl82_gpio: i2c8-bu18rl82-gpio {
 				compatible = "rohm,bu18rl82-gpio";
-				status = "okay";
+				status = "disabled";
 
 				gpio-controller;
 				#gpio-cells = <2>;
@@ -2525,36 +2560,37 @@
 
 		i2c8_bu18rl82_bridge: i2c8-bu18rl82-bridge {
 			compatible = "rohm,bu18rl82-bridge";
-			status = "okay";
-		};
+			status = "disabled";
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+				port@0 {
+					reg = <0>;
 
-				i2c8_bu18rl82_in_i2c8_bu18tl82: endpoint {
-					remote-endpoint = <&i2c8_bu18tl82_out_i2c8_bu18rl82>;
+					i2c8_bu18rl82_in_i2c8_bu18tl82: endpoint {
+						remote-endpoint = <&i2c8_bu18tl82_out_i2c8_bu18rl82>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					i2c8_bu18rl82_out_panel1: endpoint {
+						remote-endpoint = <&panel1_in_i2c8_bu18rl82>;
+					};
 				};
 			};
-
-			port@1 {
-				reg = <1>;
-
-				i2c8_bu18rl82_out_panel1: endpoint {
-					remote-endpoint = <&panel1_in_i2c8_bu18rl82>;
-				};
-			};
 		};
+
 	};
 
 	lt7911d@2b {
 		compatible = "lontium,lt7911d-fb-notifier";
 		reg = <0x2b>;
 		reset-gpios = <&gpio3 RK_PD2 GPIO_ACTIVE_LOW>;
-		status = "okay";
+		status = "disabled";
 	};
 };
 

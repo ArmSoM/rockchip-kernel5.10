@@ -1,4 +1,4 @@
-uname_r=5.10.160
+uname_r=5.10.209-rk3528
 initrd=initrd-5.10
 size=0x1000000
 cmdline="earlyprintk console=ttyFIQ0 console=tty1 consoleblank=0 loglevel=7 rootwait rw rootfstype=ext4"

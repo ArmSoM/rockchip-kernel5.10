@@ -209,18 +209,6 @@
 	cpu-supply = <&vdd_cpu>;
 };
 
-&bus_soc {
-	rockchip,soc-bus-table = <0 0x00a000a8 0x7001>,
-				 <1 0x00a000a8 0x7c39>,
-				 <2 0x00a000a8 0x7c39>,
-				 <3 0x00a000a8 0x7c39>,
-				 <4 0x00a000a5 0xb007>,
-				 <5 0x00a000a8 0x7034>,
-				 <6 0x00a000a8 0x7034>,
-				 <7 0x00a000a8 0x7034>,
-				 <8 0x00a000a8 0x7001>;
-};
-
 &dfi {
 	status = "okay";
 };
@@ -613,7 +601,7 @@
 				regulator-boot-on;
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
-				regulator-init-microvolt = <900000>;
+				regulator-init-microvolt = <950000>;
 				regulator-ramp-delay = <6001>;
 				regulator-initial-mode = <0x2>;
 				regulator-name = "vdd_logic";
@@ -628,7 +616,7 @@
 				regulator-boot-on;
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
-				regulator-init-microvolt = <900000>;
+				regulator-init-microvolt = <1050000>;
 				regulator-ramp-delay = <6001>;
 				regulator-initial-mode = <0x2>;
 				regulator-name = "vdd_cpu";

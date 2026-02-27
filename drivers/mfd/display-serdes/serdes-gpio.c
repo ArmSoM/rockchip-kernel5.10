@@ -108,18 +108,9 @@ static void serdes_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 
 	for (i = 0; i < chip->ngpio; i++) {
 		int gpio = i + chip->base;
-		const char *label, *level;
+		const char *level;
 
-		/* We report the GPIO even if it's not requested since
-		 * we're also reporting things like alternate
-		 * functions which apply even when the GPIO is not in
-		 * use as a GPIO.
-		 */
-		label = gpiochip_is_requested(chip, i);
-		if (!label)
-			label = "Unrequested";
-
-		seq_printf(s, " %s-gpio-%02d ", label, gpio);
+		seq_printf(s, "gpio-%02d ", gpio);
 
 		if (serdes->chip_data->gpio_ops->get_level)
 			ret = serdes->chip_data->gpio_ops->get_level(serdes, i);
@@ -221,6 +212,7 @@ static const struct of_device_id serdes_gpio_of_match[] = {
 	{ .compatible = "maxim,max96752-gpio", },
 	{ .compatible = "maxim,max96755-gpio", },
 	{ .compatible = "maxim,max96772-gpio", },
+	{ .compatible = "maxim,max96789-gpio", },
 	{ .compatible = "rockchip,rkx111-gpio", },
 	{ .compatible = "rockchip,rkx121-gpio", },
 	{ .compatible = "novo,nca9539-gpio", },

@@ -9,6 +9,7 @@
  * V0.0X01.0X03 fix gain range.
  * V0.0X01.0X04 add enum_frame_interval function.
  * V0.0X01.0X05 add quick stream on/off
+ * V0.0X01.0X06 support thunder boot function.
  */
 
 #include <linux/clk.h>
@@ -31,8 +32,9 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-subdev.h>
 #include <linux/pinctrl/consumer.h>
+#include "../platform/rockchip/isp/rkisp_tb_helper.h"
 
-#define DRIVER_VERSION			KERNEL_VERSION(0, 0x01, 0x05)
+#define DRIVER_VERSION			KERNEL_VERSION(0, 0x01, 0x06)
 
 #ifndef V4L2_CID_DIGITAL_GAIN
 #define V4L2_CID_DIGITAL_GAIN		V4L2_CID_GAIN
@@ -173,6 +175,8 @@ struct sc401ai {
 	const char		*module_name;
 	const char		*len_name;
 	u32			cur_vts;
+	bool			is_thunderboot;
+	bool			is_first_streamoff;
 	struct preisp_hdrae_exp_s init_hdrae_exp;
 };
 
@@ -442,10 +446,16 @@ static const struct sc401ai_mode supported_modes[] = {
 	},
 };
 
+static const u32 bus_code[] = {
+	MEDIA_BUS_FMT_SBGGR10_1X10,
+};
+
 static const s64 link_freq_menu_items[] = {
 	SC401AI_LINK_FREQ_315,
 	SC401AI_LINK_FREQ_630,
 };
+
+static int __sc401ai_power_on(struct sc401ai *sc401ai);
 
 /* Write registers up to 4 at a time */
 static int sc401ai_write_reg(struct i2c_client *client, u16 reg,
@@ -624,6 +634,11 @@ static int sc401ai_set_gain_reg(struct sc401ai *sc401ai, u32 gain)
 		DIG_Fine_gain_reg = abs(800 * gain / (Dcg_gainx100 * Coarse_gain *
 							DIG_gain) / ANA_Fine_gainx64);
 
+	if (sc401ai->is_thunderboot && rkisp_tb_get_state() == RKISP_TB_NG) {
+		sc401ai->is_thunderboot = false;
+		__sc401ai_power_on(sc401ai);
+	}
+
 	ret = sc401ai_write_reg(sc401ai->client,
 				SC401AI_REG_DIG_GAIN,
 				SC401AI_REG_VALUE_08BIT,
@@ -665,6 +680,10 @@ sc401ai_find_best_fit(struct v4l2_subdev_format *fmt)
 		if (cur_best_fit_dist == -1 || dist < cur_best_fit_dist) {
 			cur_best_fit_dist = dist;
 			cur_best_fit = i;
+		} else if (dist == cur_best_fit_dist &&
+			   framefmt->code == supported_modes[i].bus_fmt) {
+			cur_best_fit = i;
+			break;
 		}
 	}
 
@@ -746,11 +765,9 @@ static int sc401ai_enum_mbus_code(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_pad_config *cfg,
 				  struct v4l2_subdev_mbus_code_enum *code)
 {
-	struct sc401ai *sc401ai = to_sc401ai(sd);
-
-	if (code->index != 0)
+	if (code->index >= ARRAY_SIZE(bus_code))
 		return -EINVAL;
-	code->code = sc401ai->cur_mode->bus_fmt;
+	code->code = bus_code[code->index];
 
 	return 0;
 }
@@ -799,6 +816,69 @@ static int sc401ai_g_frame_interval(struct v4l2_subdev *sd,
 		fi->interval = sc401ai->cur_fps;
 	else
 		fi->interval = mode->max_fps;
+
+	return 0;
+}
+
+static const struct sc401ai_mode *sc401ai_find_mode(struct sc401ai *sc401ai, int fps)
+{
+	const struct sc401ai_mode *mode = NULL;
+	const struct sc401ai_mode *match = NULL;
+	int cur_fps = 0;
+	int i = 0;
+
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
+		mode = &supported_modes[i];
+		if (mode->width == sc401ai->cur_mode->width &&
+		    mode->height == sc401ai->cur_mode->height &&
+		    mode->hdr_mode == sc401ai->cur_mode->hdr_mode &&
+		    mode->bus_fmt == sc401ai->cur_mode->bus_fmt) {
+			cur_fps = DIV_ROUND_CLOSEST(mode->max_fps.denominator, mode->max_fps.numerator);
+			if (cur_fps == fps) {
+				match = mode;
+				break;
+			}
+		}
+	}
+	return match;
+}
+
+static int sc401ai_s_frame_interval(struct v4l2_subdev *sd,
+				   struct v4l2_subdev_frame_interval *fi)
+{
+	struct sc401ai *sc401ai = to_sc401ai(sd);
+	const struct sc401ai_mode *mode = NULL;
+	struct v4l2_fract *fract = &fi->interval;
+	s64 h_blank, vblank_def;
+	int fps;
+
+	if (sc401ai->streaming)
+		return -EBUSY;
+
+	if (fi->pad != 0)
+		return -EINVAL;
+
+	if (fract->numerator == 0) {
+		v4l2_err(sd, "error param, check interval param\n");
+		return -EINVAL;
+	}
+	fps = DIV_ROUND_CLOSEST(fract->denominator, fract->numerator);
+	mode = sc401ai_find_mode(sc401ai, fps);
+	if (mode == NULL) {
+		v4l2_err(sd, "couldn't match fi\n");
+		return -EINVAL;
+	}
+
+	sc401ai->cur_mode = mode;
+
+	h_blank = mode->hts_def - mode->width;
+	__v4l2_ctrl_modify_range(sc401ai->hblank, h_blank,
+				 h_blank, 1, h_blank);
+	vblank_def = mode->vts_def - mode->height;
+	__v4l2_ctrl_modify_range(sc401ai->vblank, vblank_def,
+				 SC401AI_VTS_MAX - mode->height,
+				 1, vblank_def);
+	sc401ai->cur_fps = mode->max_fps;
 
 	return 0;
 }
@@ -989,23 +1069,31 @@ static int __sc401ai_start_stream(struct sc401ai *sc401ai)
 {
 	int ret;
 
-	ret = sc401ai_write_array(sc401ai->client, sc401ai->cur_mode->reg_list);
-	if (ret)
-		return ret;
+	if (!sc401ai->is_thunderboot) {
+		ret = sc401ai_write_array(sc401ai->client, sc401ai->cur_mode->reg_list);
+		if (ret)
+			return ret;
 
-	/* In case these controls are set before streaming */
-	ret = __v4l2_ctrl_handler_setup(&sc401ai->ctrl_handler);
-	if (ret)
-		return ret;
+		/* In case these controls are set before streaming */
+		ret = __v4l2_ctrl_handler_setup(&sc401ai->ctrl_handler);
+		if (ret)
+			return ret;
+	}
 
 	return sc401ai_write_reg(sc401ai->client,
-				 SC401AI_REG_CTRL_MODE,
-				 SC401AI_REG_VALUE_08BIT,
-				 SC401AI_MODE_STREAMING);
+				SC401AI_REG_CTRL_MODE,
+				SC401AI_REG_VALUE_08BIT,
+				SC401AI_MODE_STREAMING);
+
 }
 
 static int __sc401ai_stop_stream(struct sc401ai *sc401ai)
 {
+	if (sc401ai->is_thunderboot) {
+		sc401ai->is_first_streamoff = true;
+		pm_runtime_put(&sc401ai->client->dev);
+	}
+
 	return sc401ai_write_reg(sc401ai->client,
 				 SC401AI_REG_CTRL_MODE,
 				 SC401AI_REG_VALUE_08BIT,
@@ -1024,6 +1112,10 @@ static int sc401ai_s_stream(struct v4l2_subdev *sd, int on)
 		goto unlock_and_return;
 
 	if (on) {
+		if (sc401ai->is_thunderboot && rkisp_tb_get_state() == RKISP_TB_NG) {
+			sc401ai->is_thunderboot = false;
+			__sc401ai_power_on(sc401ai);
+		}
 		ret = pm_runtime_get_sync(&client->dev);
 		if (ret < 0) {
 			pm_runtime_put_noidle(&client->dev);
@@ -1115,6 +1207,10 @@ static int __sc401ai_power_on(struct sc401ai *sc401ai)
 		dev_err(dev, "Failed to enable xvclk\n");
 		return ret;
 	}
+
+	if (sc401ai->is_thunderboot)
+		return 0;
+
 	if (!IS_ERR(sc401ai->reset_gpio))
 		gpiod_set_value_cansleep(sc401ai->reset_gpio, 0);
 
@@ -1152,6 +1248,15 @@ static void __sc401ai_power_off(struct sc401ai *sc401ai)
 {
 	int ret;
 	struct device *dev = &sc401ai->client->dev;
+
+	if (sc401ai->is_thunderboot) {
+		if (sc401ai->is_first_streamoff) {
+			sc401ai->is_thunderboot = false;
+			sc401ai->is_first_streamoff = false;
+		} else {
+			return;
+		}
+	}
 
 	if (!IS_ERR(sc401ai->pwdn_gpio))
 		gpiod_set_value_cansleep(sc401ai->pwdn_gpio, 0);
@@ -1246,6 +1351,7 @@ static const struct v4l2_subdev_core_ops sc401ai_core_ops = {
 static const struct v4l2_subdev_video_ops sc401ai_video_ops = {
 	.s_stream = sc401ai_s_stream,
 	.g_frame_interval = sc401ai_g_frame_interval,
+	.s_frame_interval = sc401ai_s_frame_interval,
 };
 
 static const struct v4l2_subdev_pad_ops sc401ai_pad_ops = {
@@ -1491,6 +1597,11 @@ static int sc401ai_check_sensor_id(struct sc401ai *sc401ai,
 	u32 id = 0;
 	int ret;
 
+	if (sc401ai->is_thunderboot) {
+		dev_info(dev, "Enable thunderboot mode, skip sensor id check\n");
+		return 0;
+	}
+
 	ret = sc401ai_read_reg(client, SC401AI_REG_CHIP_ID,
 			       SC401AI_REG_VALUE_16BIT, &id);
 	if (id != CHIP_ID) {
@@ -1549,6 +1660,8 @@ static int sc401ai_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
+	sc401ai->is_thunderboot = IS_ENABLED(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP);
+
 	sc401ai->client = client;
 	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
 		if (hdr_mode == supported_modes[i].hdr_mode) {
@@ -1565,13 +1678,23 @@ static int sc401ai_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-	sc401ai->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(sc401ai->reset_gpio))
-		dev_warn(dev, "Failed to get reset-gpios\n");
+	if (sc401ai->is_thunderboot) {
+		sc401ai->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_ASIS);
+		if (IS_ERR(sc401ai->reset_gpio))
+			dev_warn(dev, "Failed to get reset-gpios\n");
 
-	sc401ai->pwdn_gpio = devm_gpiod_get(dev, "pwdn", GPIOD_OUT_LOW);
-	if (IS_ERR(sc401ai->pwdn_gpio))
-		dev_warn(dev, "Failed to get pwdn-gpios\n");
+		sc401ai->pwdn_gpio = devm_gpiod_get(dev, "pwdn", GPIOD_ASIS);
+		if (IS_ERR(sc401ai->pwdn_gpio))
+			dev_warn(dev, "Failed to get pwdn-gpios\n");
+	} else {
+		sc401ai->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+		if (IS_ERR(sc401ai->reset_gpio))
+			dev_warn(dev, "Failed to get reset-gpios\n");
+
+		sc401ai->pwdn_gpio = devm_gpiod_get(dev, "pwdn", GPIOD_OUT_LOW);
+		if (IS_ERR(sc401ai->pwdn_gpio))
+			dev_warn(dev, "Failed to get pwdn-gpios\n");
+	}
 
 	sc401ai->pinctrl = devm_pinctrl_get(dev);
 	if (!IS_ERR(sc401ai->pinctrl)) {
@@ -1646,7 +1769,10 @@ static int sc401ai_probe(struct i2c_client *client,
 
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-	pm_runtime_idle(dev);
+	if (sc401ai->is_thunderboot)
+		pm_runtime_get_sync(dev);
+	else
+		pm_runtime_idle(dev);
 
 	return 0;
 
@@ -1718,7 +1844,12 @@ static void __exit sensor_mod_exit(void)
 	i2c_del_driver(&sc401ai_i2c_driver);
 }
 
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
+subsys_initcall(sensor_mod_init);
+#else
 device_initcall_sync(sensor_mod_init);
+#endif
+
 module_exit(sensor_mod_exit);
 
 MODULE_DESCRIPTION("smartsens sc401ai sensor driver");

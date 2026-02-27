@@ -41,6 +41,8 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_dsc.h>
 
+#include <linux/nvmem-consumer.h>
+
 #include "panel-simple.h"
 
 enum panel_simple_cmd_type {
@@ -160,6 +162,40 @@ struct panel_simple {
 	enum drm_panel_orientation orientation;
 };
 
+
+struct entry {
+    u32 offset;
+    u32 length;
+};
+
+/**
+ * @magic: LCD config firmware magic number. 
+ * @vendor: LCD vendor name.
+ * @model: LCD model name.
+ * @version: LCD config firmware version.
+ * @timing_entry: Entry of timing table.
+ * @init_seq_entry: Entry of init sequence.
+ * @eixt_seq_entry: Entry of exit sequence.
+ * @touchscreen_entry: Entry of touchscreen properties.
+ * @firmware_size: Firmware size.
+ */
+struct firmware_header {
+	u32 magic;
+    u8 vendor[16];
+    u8 model[32];
+    u8 version[8];
+    struct entry timing_entry;
+    struct entry init_seq_entry;
+	struct entry eixt_seq_entry;
+	struct entry touchscreen_entry;
+	u32 firmware_size;
+};
+
+static inline void panel_simple_msleep(unsigned int msecs)
+{
+	usleep_range(msecs * 1000, msecs * 1000 + 100);
+}
+
 static inline struct panel_simple *to_panel_simple(struct drm_panel *panel)
 {
 	return container_of(panel, struct panel_simple, base);
@@ -277,7 +313,7 @@ static int panel_simple_xfer_dsi_cmd_seq(struct panel_simple *panel,
 			dev_err(dev, "failed to write dcs cmd: %d\n", err);
 
 		if (cmd->header.delay)
-			usleep_range(cmd->header.delay * 1000, cmd->header.delay * 1000 + 100);
+			panel_simple_msleep(cmd->header.delay);
 	}
 
 	return 0;
@@ -300,7 +336,7 @@ static int panel_simple_xfer_spi_cmd_seq(struct panel_simple *panel, struct pane
 			return ret;
 
 		if (cmd->header.delay)
-			usleep_range(cmd->header.delay * 1000, cmd->header.delay * 1000 + 100);
+			panel_simple_msleep(cmd->header.delay);
 	}
 
 	return 0;
@@ -478,7 +514,7 @@ static int panel_simple_disable(struct drm_panel *panel)
 		return 0;
 
 	if (p->desc->delay.disable)
-		usleep_range(p->desc->delay.disable * 1000, p->desc->delay.disable * 1000 + 100);
+		panel_simple_msleep(p->desc->delay.disable);
 
 	p->enabled = false;
 
@@ -510,7 +546,7 @@ static int panel_simple_unprepare(struct drm_panel *panel)
 	panel_simple_regulator_disable(p);
 
 	if (p->desc->delay.unprepare)
-		usleep_range(p->desc->delay.unprepare * 1000, p->desc->delay.unprepare * 1000 + 100);
+		panel_simple_msleep(p->desc->delay.unprepare);
 
 	p->prepared = false;
 
@@ -564,7 +600,7 @@ static int panel_simple_prepare(struct drm_panel *panel)
 	if (p->no_hpd)
 		delay += p->desc->delay.hpd_absent_delay;
 	if (delay)
-		usleep_range(delay * 1000, delay * 1000 + 100);
+		panel_simple_msleep(delay);
 
 	if (p->hpd_gpio) {
 		if (IS_ERR(p->hpd_gpio)) {
@@ -589,12 +625,12 @@ static int panel_simple_prepare(struct drm_panel *panel)
 	gpiod_direction_output(p->reset_gpio, 1);
 
 	if (p->desc->delay.reset)
-		usleep_range(p->desc->delay.reset * 1000, p->desc->delay.reset * 1000 + 100);
+		panel_simple_msleep(p->desc->delay.reset);
 
 	gpiod_direction_output(p->reset_gpio, 0);
 
 	if (p->desc->delay.init)
-		usleep_range(p->desc->delay.init * 1000, p->desc->delay.init * 1000 + 100);
+		panel_simple_msleep(p->desc->delay.init);
 
 	if (p->desc->init_seq) {
 		if (p->desc->cmd_type == CMD_TYPE_SPI) {
@@ -621,7 +657,7 @@ static int panel_simple_enable(struct drm_panel *panel)
 		return 0;
 
 	if (p->desc->delay.enable)
-		usleep_range(p->desc->delay.enable * 1000, p->desc->delay.enable * 1000 + 100);
+		panel_simple_msleep(p->desc->delay.enable);
 
 	p->enabled = true;
 
@@ -1042,8 +1078,8 @@ static const struct panel_desc ampire_am_480272h3tmqw_t01h = {
 	.num_modes = 1,
 	.bpc = 8,
 	.size = {
-		.width = 105,
-		.height = 67,
+		.width = 99,
+		.height = 58,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
 };
@@ -1348,21 +1384,21 @@ static const struct panel_desc auo_g104sn02 = {
 	},
 };
 
-static const struct drm_display_mode auo_g121ean01_mode = {
-	.clock = 66700,
-	.hdisplay = 1280,
-	.hsync_start = 1280 + 58,
-	.hsync_end = 1280 + 58 + 8,
-	.htotal = 1280 + 58 + 8 + 70,
-	.vdisplay = 800,
-	.vsync_start = 800 + 6,
-	.vsync_end = 800 + 6 + 4,
-	.vtotal = 800 + 6 + 4 + 10,
+static const struct display_timing auo_g121ean01_timing = {
+	.pixelclock = { 60000000, 74400000, 90000000 },
+	.hactive = { 1280, 1280, 1280 },
+	.hfront_porch = { 20, 50, 100 },
+	.hback_porch = { 20, 50, 100 },
+	.hsync_len = { 30, 100, 200 },
+	.vactive = { 800, 800, 800 },
+	.vfront_porch = { 2, 10, 25 },
+	.vback_porch = { 2, 10, 25 },
+	.vsync_len = { 4, 18, 50 },
 };
 
 static const struct panel_desc auo_g121ean01 = {
-	.modes = &auo_g121ean01_mode,
-	.num_modes = 1,
+	.timings = &auo_g121ean01_timing,
+	.num_timings = 1,
 	.bpc = 8,
 	.size = {
 		.width = 261,
@@ -1538,7 +1574,9 @@ static const struct panel_desc auo_t215hvn01 = {
 	.delay = {
 		.disable = 5,
 		.unprepare = 1000,
-	}
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
+	.connector_type = DRM_MODE_CONNECTOR_LVDS,
 };
 
 static const struct drm_display_mode avic_tm070ddh03_mode = {
@@ -2429,6 +2467,7 @@ static const struct panel_desc innolux_at043tn24 = {
 		.height = 54,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
 	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 };
 
@@ -2489,13 +2528,13 @@ static const struct panel_desc innolux_g070y2_l01 = {
 static const struct display_timing innolux_g101ice_l01_timing = {
 	.pixelclock = { 60400000, 71100000, 74700000 },
 	.hactive = { 1280, 1280, 1280 },
-	.hfront_porch = { 41, 80, 100 },
-	.hback_porch = { 40, 79, 99 },
-	.hsync_len = { 1, 1, 1 },
+	.hfront_porch = { 30, 60, 70 },
+	.hback_porch = { 30, 60, 70 },
+	.hsync_len = { 22, 40, 60 },
 	.vactive = { 800, 800, 800 },
-	.vfront_porch = { 5, 11, 14 },
-	.vback_porch = { 4, 11, 14 },
-	.vsync_len = { 1, 1, 1 },
+	.vfront_porch = { 3, 8, 14 },
+	.vback_porch = { 3, 8, 14 },
+	.vsync_len = { 4, 7, 12 },
 	.flags = DISPLAY_FLAGS_DE_HIGH,
 };
 
@@ -2512,6 +2551,7 @@ static const struct panel_desc innolux_g101ice_l01 = {
 		.disable = 200,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH,
 	.connector_type = DRM_MODE_CONNECTOR_LVDS,
 };
 
@@ -3490,6 +3530,7 @@ static const struct drm_display_mode powertip_ph800480t013_idf02_mode = {
 	.vsync_start = 480 + 49,
 	.vsync_end = 480 + 49 + 2,
 	.vtotal = 480 + 49 + 2 + 22,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
 };
 
 static const struct panel_desc powertip_ph800480t013_idf02  = {
@@ -4666,6 +4707,120 @@ static bool of_child_node_is_present(const struct device_node *node,
 	return !!child;
 }
 
+static int panel_simple_of_get_firmware_desc_data(struct device *dev,
+					   struct panel_desc *desc)
+{
+	struct device_node *np = dev->of_node;
+	struct nvmem_device *nvmem;
+	struct firmware_header *header;
+	struct drm_display_mode *mode;
+	struct videomode *vm;
+	const u8 *init_data;
+	const u8 *exit_data;
+	u32 bus_flags;
+	int ret;
+
+	nvmem = devm_nvmem_device_get(dev, "eeprom");
+	if (IS_ERR(nvmem))
+		return PTR_ERR(nvmem);
+
+	header = (struct firmware_header *)devm_kzalloc(dev, sizeof(*header), GFP_KERNEL);
+	if (!header)
+		return -ENOMEM;
+
+	ret = nvmem_device_read(nvmem, 0, sizeof(*header), header);
+	if (ret < 0) {
+		dev_err(dev, "failed to read firmware header: %d\n", ret);
+		return ret;
+	}
+
+	if (header->firmware_size <= 0 || header->magic != 0xDEAD5A5A) {
+		dev_err(dev, "Invalid eeprom firmware");
+		return -EINVAL;
+	}
+
+	dev_info(dev, "lcd firmware magic: %x\n", header->magic);
+	dev_info(dev, "lcd firmware version: %s, size: %d\n", header->version, header->firmware_size);
+	dev_info(dev, "lcd vendor: %s, model: %s\n", header->vendor, header->model);
+	
+
+	vm = (struct videomode *)devm_kzalloc(dev, sizeof(*vm), GFP_KERNEL);
+	if (!vm)
+		return -ENOMEM;
+
+	ret = nvmem_device_read(nvmem, header->timing_entry.offset,
+				  header->timing_entry.length, vm);
+	if (ret < 0)
+		return ret;
+
+	init_data = (const u8 *)devm_kzalloc(dev, header->init_seq_entry.length, GFP_KERNEL);
+	if (!init_data)
+		return -ENOMEM;
+		
+	ret = nvmem_device_read(nvmem, header->init_seq_entry.offset,
+				  header->init_seq_entry.length,
+				  (void *)init_data);
+	if (ret < 0)
+		return ret;
+				
+	exit_data = (const u8 *)devm_kzalloc(dev, header->eixt_seq_entry.length,
+				  GFP_KERNEL);
+	if (!exit_data)
+		return -ENOMEM;
+
+	ret = nvmem_device_read(nvmem, header->eixt_seq_entry.offset,
+				  header->eixt_seq_entry.length,
+				  (void *)exit_data);
+	if (ret < 0)
+		return ret;
+
+	devm_nvmem_device_put(dev, nvmem);
+
+	mode = (struct drm_display_mode*)devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
+	if (!mode)
+		return -ENOMEM;
+	
+	drm_display_mode_from_videomode(vm, mode);
+	drm_bus_flags_from_videomode(vm, &bus_flags);
+	
+	desc->modes = mode;
+	desc->num_modes = 1;
+	desc->bus_flags = bus_flags;
+
+	of_property_read_u32(np, "prepare-delay-ms", &desc->delay.prepare);
+	of_property_read_u32(np, "enable-delay-ms", &desc->delay.enable);
+	of_property_read_u32(np, "disable-delay-ms", &desc->delay.disable);
+	of_property_read_u32(np, "unprepare-delay-ms", &desc->delay.unprepare);
+	of_property_read_u32(np, "reset-delay-ms", &desc->delay.reset);
+	of_property_read_u32(np, "init-delay-ms", &desc->delay.init);
+		
+	desc->init_seq = devm_kzalloc(dev, sizeof(*desc->init_seq),
+				      GFP_KERNEL);
+	if (!desc->init_seq)
+		return -ENOMEM;
+
+	ret = panel_simple_parse_cmd_seq(dev, init_data, header->init_seq_entry.length,
+						 desc->init_seq);
+	if (ret) {
+		dev_err(dev, "failed to parse init sequence\n");
+		return ret;
+	}
+
+	desc->exit_seq = devm_kzalloc(dev, sizeof(*desc->exit_seq),
+				      GFP_KERNEL);
+	if (!desc->exit_seq)
+		return -ENOMEM;
+
+	ret = panel_simple_parse_cmd_seq(dev, exit_data, header->eixt_seq_entry.length,
+						 desc->exit_seq);
+	if (ret) {
+		dev_err(dev, "failed to parse exit sequence\n");
+		return ret;
+	}	
+
+	return 0;
+}
+
 static int panel_simple_of_get_desc_data(struct device *dev,
 					 struct panel_desc *desc)
 {
@@ -5051,9 +5206,15 @@ static int panel_simple_dsi_of_get_desc_data(struct device *dev,
 	u32 val;
 	int err;
 
-	err = panel_simple_of_get_desc_data(dev, &desc->desc);
-	if (err)
-		return err;
+	err = panel_simple_of_get_firmware_desc_data(dev, &desc->desc);
+	if (!err) {
+		dev_info(dev, "found firmware desc data\n");
+	} else {
+		dev_info(dev, "not found firmware desc data, using defaults\n");
+		err = panel_simple_of_get_desc_data(dev, &desc->desc);
+		if (err)
+			return err;
+	}
 
 	if (!of_property_read_u32(np, "dsi,flags", &val))
 		desc->flags = val;
@@ -5108,7 +5269,7 @@ static int panel_simple_dsi_probe(struct mipi_dsi_device *dsi)
 		props.max_brightness = 255;
 
 		panel->base.backlight =
-			devm_backlight_device_register(dev, "dcs-backlight",
+			devm_backlight_device_register(dev, dev_name(dev),
 						       dev, panel, &dcs_bl_ops,
 						       &props);
 		if (IS_ERR(panel->base.backlight)) {
@@ -5288,7 +5449,8 @@ static int __init panel_simple_init(void)
 
 	return 0;
 }
-module_init(panel_simple_init);
+// module_init(panel_simple_init);
+late_initcall(panel_simple_init);
 
 static void __exit panel_simple_exit(void)
 {

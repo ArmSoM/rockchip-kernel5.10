@@ -118,14 +118,6 @@
 		status = "okay";
 	};
 
-	dummy_codec: dummy-codec {
-		status = "okay";
-		compatible = "rockchip,dummy-codec";
-		#sound-dai-cells = <0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&rk3308_reset>;
-	};
-
 	car_rk3308_sound: car-rk3308-sound {
 		status = "okay";
 		compatible = "simple-audio-card";
@@ -140,7 +132,7 @@
 			dai-tdm-slot-width = <32>;
 		};
 		codec_master: simple-audio-card,codec {
-			sound-dai = <&dummy_codec>;
+			sound-dai = <&spi_codec>;
 		};
 	};
 };
@@ -282,7 +274,7 @@
 
 	rk3308 {
 		rk3308_reset: rk3308-reset {
-			rockchip,pins = <4 RK_PC6 RK_FUNC_GPIO &pcfg_pull_up>;
+			rockchip,pins = <4 RK_PC6 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 };
@@ -326,6 +318,24 @@
 	status = "disabled";
 };
 
+&spi4 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi4m0_cs1 &spi4m0_pins>;
+
+	spi_codec: spi-codec@1 {
+		compatible ="rockchip,spi-codec";
+		reg = <1>;
+		spi-lsb-first;
+		spi-max-frequency = <5000000>;
+		#sound-dai-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rk3308_reset>;
+		reset-gpios = <&gpio4 RK_PC6 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+};
+
 &uart9 {
 	status = "okay";
 	pinctrl-names = "default";
@@ -358,6 +368,7 @@
 };
 
 &usbdp_phy1 {
+	maximum-speed = "high-speed";
 	rockchip,dp-lane-mux = <3 2 1 0>;
 	status = "okay";
 };
@@ -367,7 +378,6 @@
 };
 
 &usbdp_phy1_u3 {
-	maximum-speed = "high-speed";
 	status = "okay";
 };
 

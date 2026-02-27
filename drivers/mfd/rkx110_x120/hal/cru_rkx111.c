@@ -304,6 +304,7 @@ static HAL_Status RKX11x_HAL_CRU_ClkSetFreq(struct hwclk *hw, uint32_t clockName
     uint32_t pll;
     uint8_t overMax = 0;
     HAL_Status ret = HAL_OK;
+    int i;
 
     if (clockName == RKX110_CLK_D_DSI_0_PATTERN_GEN) {
         clockName = RKX111_CPS_DCLK_D_DSI_0_REC;
@@ -341,6 +342,8 @@ static HAL_Status RKX11x_HAL_CRU_ClkSetFreq(struct hwclk *hw, uint32_t clockName
     /* link(dclk): Allowed to change PLL rate if need ! */
     case RKX111_CPS_DCLK_D_DSI_0_REC:
     case RKX111_CPS_DCLK_D_DSI_1_REC:
+    case RKX111_CPS_CLK_D_LVDS0_PATTERN_GEN:
+    case RKX111_CPS_CLK_D_LVDS1_PATTERN_GEN:
     case RKX110_CPS_CLK_2X_LVDS_RKLINK_TX:
     /* i2s */
     case RKX110_CPS_CLK_I2S_SRC_RKLINK_TX:
@@ -369,12 +372,21 @@ static HAL_Status RKX11x_HAL_CRU_ClkSetFreq(struct hwclk *hw, uint32_t clockName
 
             /* PLL change closest new rate <= 1200M if need */
             if (!pRate) {
-                pRate = (_MHZ(1200) / rate) * rate;
-            }
-
-            ret = RKX11x_HAL_CRU_ClkSetFreq(hw, pll, pRate);
-            if (ret != HAL_OK) {
-                return ret;
+               if (!rate || rate > _MHZ(1200))
+                  return HAL_ERROR;
+               for (i = _MHZ(1200) / rate; i > _MHZ(24) / rate; i--) {
+                  pRate = i * rate;
+                  ret = RKX11x_HAL_CRU_ClkSetFreq(hw, pll, pRate);
+                  if (ret == HAL_OK)
+                     break;
+               }
+               if (ret != HAL_OK)
+                  return ret;
+            } else {
+               ret = RKX11x_HAL_CRU_ClkSetFreq(hw, pll, pRate);
+               if (ret != HAL_OK) {
+                   return ret;
+               }
             }
 
             /* if success, continue to set divider */
@@ -384,9 +396,6 @@ static HAL_Status RKX11x_HAL_CRU_ClkSetFreq(struct hwclk *hw, uint32_t clockName
     /* bus */
     case RKX110_CPS_DCLK_RX_PRE:
     case RKX111_CPS_DCLK_RX_PRE_200M:
-    /* lvds */
-    case RKX111_CPS_CLK_D_LVDS0_PATTERN_GEN:
-    case RKX111_CPS_CLK_D_LVDS1_PATTERN_GEN:
     /* camera */
     case RKX110_CPS_CLK_CAM0_OUT2IO:
     case RKX110_CPS_CLK_CAM1_OUT2IO:

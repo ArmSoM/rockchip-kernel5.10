@@ -256,7 +256,9 @@ static int rockchip_combphy_init(struct phy *phy)
 	if (cfg->pipe_phy_grf_reset.enable)
 		param_write(priv->phy_grf, &cfg->pipe_phy_grf_reset, false);
 
-	if (priv->mode == PHY_TYPE_USB3) {
+	if (priv->mode == PHY_TYPE_USB3 &&
+	    !device_property_present(priv->dev, "rockchip,dis-u3otg0-port") &&
+	    !device_property_present(priv->dev, "rockchip,dis-u3otg1-port")) {
 		ret = readx_poll_timeout_atomic(rockchip_combphy_is_ready,
 						priv, val,
 						val == cfg->pipe_phy_status.enable,
@@ -287,9 +289,42 @@ static int rockchip_combphy_exit(struct phy *phy)
 	return 0;
 }
 
+static const char *rockchip_combphy_mode2str(enum phy_mode mode)
+{
+	switch (mode) {
+	case PHY_TYPE_SATA:
+		return "SATA";
+	case PHY_TYPE_PCIE:
+		return "PCIe";
+	case PHY_TYPE_USB3:
+		return "USB3";
+	case PHY_TYPE_SGMII:
+	case PHY_TYPE_QSGMII:
+		return "GMII";
+	default:
+		return "Unknown";
+	}
+}
+
+static int rockchip_combphy_validate(struct phy *phy, enum phy_mode mode, int submode,
+			      union phy_configure_opts *opts)
+{
+	struct rockchip_combphy_priv *priv = phy_get_drvdata(phy);
+
+	if (mode != priv->mode) {
+		dev_err(priv->dev, "expected mode is %s, but current mode is %s\n",
+			rockchip_combphy_mode2str(mode),
+			rockchip_combphy_mode2str(priv->mode));
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct phy_ops rochchip_combphy_ops = {
 	.init = rockchip_combphy_init,
 	.exit = rockchip_combphy_exit,
+	.validate = rockchip_combphy_validate,
 	.owner = THIS_MODULE,
 };
 
@@ -545,6 +580,34 @@ static int rk3528_combphy_cfg(struct rockchip_combphy_priv *priv)
 	default:
 		dev_err(priv->dev, "Unsupported rate: %lu\n", rate);
 		return -EINVAL;
+	}
+
+	if (device_property_read_bool(priv->dev, "rockchip,ext-refclk")) {
+		param_write(priv->phy_grf, &cfg->pipe_clk_ext, true);
+		if (priv->mode == PHY_TYPE_PCIE && rate == 100000000) {
+			/*
+			 * PLL charge pump current adjust = 111
+			 * PLL LPF R1 adjust = 1001
+			 * PLL KVCO adjust = 000 (min)
+			 * PLL KVCO fine tuning signals = 01
+			 */
+			val = readl(priv->mmio + 0x108);
+			val &= ~0x7;
+			val |= BIT(29) | (0x7 << 4 | 0x9 << 7);
+			writel(val, priv->mmio + 0x108);
+			val = readl(priv->mmio + 0x18);
+			val &= ~(0xf << 10);
+			val |= (0x2 << 10);
+			writel(val, priv->mmio + 0x18);
+		}
+	}
+
+	if (priv->mode == PHY_TYPE_PCIE) {
+		if (device_property_read_bool(priv->dev, "rockchip,enable-ssc")) {
+			val = readl(priv->mmio + 0x100);
+			val |= BIT(20);
+			writel(val, priv->mmio + 0x100);
+		}
 	}
 
 	return 0;
@@ -938,6 +1001,27 @@ static int rk3568_combphy_cfg(struct rockchip_combphy_priv *priv)
 	if (device_property_read_bool(priv->dev, "rockchip,ext-refclk")) {
 		param_write(priv->phy_grf, &cfg->pipe_clk_ext, true);
 		if (priv->mode == PHY_TYPE_PCIE && rate == 100000000) {
+			/*
+			 * PLL charge pump current adjust = 111
+			 * PLL LPF R1 adjust = 1001
+			 * PLL KVCO adjust = 000 (min)
+			 * PLL KVCO fine tuning signals = 01
+			 */
+			val = readl(priv->mmio + (0xa << 2));
+			val &= ~0x7;
+			val |= 0xf << 4;
+			writel(val, priv->mmio + (0xa << 2));
+
+			val = readl(priv->mmio + (0xb << 2));
+			val &= ~0x7;
+			val |= 0x4;
+			writel(val, priv->mmio + (0xb << 2));
+
+			val = readl(priv->mmio + (0x20 << 2));
+			val &= ~0x1c;
+			val |= 0x2 << 2;
+			writel(val, priv->mmio + (0x20 << 2));
+
 			val = readl(priv->mmio + (0xc << 2));
 			val |= 0x3 << 4 | 0x1 << 7;
 			writel(val, priv->mmio + (0xc << 2));
