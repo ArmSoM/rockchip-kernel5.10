@@ -178,7 +178,7 @@ if is_enabled CONFIG_ARCH_ROCKCHIP; then
 		uenv_patch="$objtree/arch/arm/boot/dts/uEnv"
 	fi
 	cp $uenv_patch/uEnv*.txt "$tmpdir/boot/uEnv"
-	cp $uenv_patch/${version##*-}/*.txt "$tmpdir/boot/uEnv"
+	#cp $uenv_patch/${version##*-}/*.txt "$tmpdir/boot/uEnv"
 	cp $uenv_patch/boot.cmd "$tmpdir/boot/"
 	mkimage -T script -C none -d $tmpdir/boot/boot.cmd $tmpdir/boot/boot.scr
 	main_version=$(echo "${version}" | cut -d'.' -f1,2)
